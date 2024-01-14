@@ -1,0 +1,116 @@
+version: '3'
+
+services:
+  
+  jaeger:
+    image: jaegertracing/all-in-one:${JAEGER_VERSION:-latest}
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - LOG_LEVEL=debug
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - backend  
+
+    # networks:
+      # - jaeger-example
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro    
+    networks:
+      - backend  
+  
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml
+
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:9090 || exit
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend  
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    ports:
+     - '9093:9093'
+    volumes:
+    #  - ./alertmanager/:/etc/alertmanager/
+    - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+     - --config.file=/etc/alertmanager/alertmanager.yml
+      # - '-config.file=/etc/alertmanager/config.yml'
+      # - '-storage.path=/alertmanager'
+    # deploy:
+      # mode: global
+   
+      # - '--storage.path=/alertmanager'
+    networks:
+      - backend    
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - 6379:6379
+    restart: unless-stopped
+    networks:
+      - backend  
+
+  # redis-exporter:
+  #   image: oliver006/redis_exporter
+  #   container_name: redis-exporter
+  #   ports: 
+  #     - 9121:9121
+  #   restart: unless-stopped
+  #   environment:
+  #     REDIS_ADDR: "redis:6379"
+  #     REDIS_USER: null
+  #     REDIS_PASSWORD: null
+      
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    restart: unless-stopped   
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini 
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafana-data:/var/lib/grafana
+    networks:
+      - backend  
+      # - ./grafana/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml
+
+volumes:
+  grafana-data:
+  # prometheus-data:
+  # alertmanager-data:
+
+
+networks:
+  backend:
+    # external: true  
+    # external: true
+
+# docker run --name jaeger -e COLLECTOR_OTLP_ENABLED=true -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:1.35
